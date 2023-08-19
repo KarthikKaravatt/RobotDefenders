@@ -16,6 +16,10 @@ const val GRID_WIDTH: Int = 9
 const val GRID_HEIGHT: Int = 9
 const val INITIAL_ROBOT_X: Double = 1.0
 const val INITIAL_ROBOT_Y: Double = 3.0
+const val CENTER_OFFSET: Double = 0.5
+const val LABEL_OFFSET: Double = 1.0
+const val ROBOT_NAME: String = "ROBOT"
+const val LINE_RADIUS: Double = 0.5
 
 class JFXArena : Pane() {
     private var robot: Image
@@ -88,11 +92,11 @@ class JFXArena : Pane() {
         }
 
         drawImage(gfx, robot, robotX, robotY)
-        drawLabel(gfx, "Robot Name", robotX, robotY)
+        drawLabel(gfx, ROBOT_NAME, robotX, robotY)
     }
     private fun drawImage(gfx: GraphicsContext, image: Image, gridX: Double, gridY: Double) {
-        val x = (gridX + 0.5) * gridSquareSize
-        val y = (gridY + 0.5) * gridSquareSize
+        val x = (gridX + CENTER_OFFSET) * gridSquareSize
+        val y = (gridY + CENTER_OFFSET) * gridSquareSize
 
         val fullSizePixelWidth = robot.width
         val fullSizePixelHeight = robot.height
@@ -120,30 +124,30 @@ class JFXArena : Pane() {
         gfx.textAlign = TextAlignment.CENTER
         gfx.textBaseline = VPos.TOP
         gfx.stroke = Color.BLUE
-        gfx.strokeText(label, (gridX + 0.5) * gridSquareSize, (gridY + 1.0) * gridSquareSize)
+        gfx.strokeText(label, (gridX + CENTER_OFFSET) * gridSquareSize, (gridY + LABEL_OFFSET) * gridSquareSize)
     }
 
-    private fun drawLine(
-        gfx: GraphicsContext,
-        gridX1: Double,
-        gridY1: Double,
-        gridX2: Double,
-        gridY2: Double
-    ) {
-        gfx.stroke = Color.RED
+    //private fun drawLine(
+    //    gfx: GraphicsContext,
+    //    gridX1: Double,
+    //    gridY1: Double,
+    //    gridX2: Double,
+    //    gridY2: Double
+    //) {
+    //    gfx.stroke = Color.RED
 
-        val radius = 0.5
-        val angle = atan2(gridY2 - gridY1, gridX2 - gridX1)
-        val clippedGridX1 = gridX1 + cos(angle) * radius
-        val clippedGridY1 = gridY1 + sin(angle) * radius
+    //    val radius = LINE_RADIUS
+    //    val angle = atan2(gridY2 - gridY1, gridX2 - gridX1)
+    //    val clippedGridX1 = gridX1 + cos(angle) * radius
+    //    val clippedGridY1 = gridY1 + sin(angle) * radius
 
-        gfx.strokeLine(
-            (clippedGridX1 + 0.5) * gridSquareSize,
-            (clippedGridY1 + 0.5) * gridSquareSize,
-            (gridX2 + 0.5) * gridSquareSize,
-            (gridY2 + 0.5) * gridSquareSize
-        )
-    }
+    //    gfx.strokeLine(
+    //        (clippedGridX1 + CENTER_OFFSET) * gridSquareSize,
+    //        (clippedGridY1 + CENTER_OFFSET) * gridSquareSize,
+    //        (gridX2 + CENTER_OFFSET) * gridSquareSize,
+    //        (gridY2 + CENTER_OFFSET) * gridSquareSize
+    //    )
+    //}
 
 
 }

@@ -7,6 +7,9 @@ import javafx.scene.control.ToolBar
 import javafx.scene.layout.BorderPane
 import javafx.stage.Stage
 
+const val ARENA_WIDTH: Double = 300.0
+const val SCENE_WIDTH: Double = 800.0
+const val SCENE_HEIGHT: Double = 800.0
 class App: Application() {
     companion object {
         @JvmStatic
@@ -20,7 +23,7 @@ class App: Application() {
         val arena = JFXArena()
         val listener = object : ArenaListener {
             override fun squareClicked(x: Int, y: Int) {
-                println("LOOL")
+                arena.setRobotPosition(0.0,0.0)
             }
         }
         arena.addListener(listener)
@@ -36,13 +39,13 @@ class App: Application() {
 
         val splitPane = SplitPane()
         splitPane.items.addAll(arena, logger)
-        arena.minWidth = 300.0
+        arena.minWidth =ARENA_WIDTH
 
         val contentPane = BorderPane()
         contentPane.top = toolbar
         contentPane.center = splitPane
 
-        val scene = Scene(contentPane, 800.0, 800.0)
+        val scene = Scene(contentPane, SCENE_WIDTH, SCENE_HEIGHT)
         stage.scene = scene
         stage.show()
     }
