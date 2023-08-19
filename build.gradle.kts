@@ -25,7 +25,7 @@ kotlin {
 }
 
 application {
-    mainClass.set("MainKt")
+    mainClass.set("App")
 }
 javafx {
     version = "20"
