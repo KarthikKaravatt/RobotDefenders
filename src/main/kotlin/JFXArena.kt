@@ -5,8 +5,6 @@ import javafx.scene.image.Image
 import javafx.scene.layout.Pane
 import javafx.scene.paint.Color
 import javafx.scene.text.TextAlignment
-import java.io.IOException
-import java.io.InputStream
 import java.lang.AssertionError
 import java.util.*
 import kotlin.math.atan2
@@ -15,19 +13,19 @@ import kotlin.math.sin
 
 const val IMAGE_FILE: String = "1554047213.png"
 const val GRID_WIDTH: Int = 9
-const val GRID_HEIGHT: Int = 9;
+const val GRID_HEIGHT: Int = 9
 const val INITIAL_ROBOT_X: Double = 1.0
 const val INITIAL_ROBOT_Y: Double = 3.0
 
 class JFXArena : Pane() {
-    private var robot: Image;
-    private val gridWidth: Int = GRID_WIDTH;
-    private val gridHeight: Int = GRID_HEIGHT;
+    private var robot: Image
+    private val gridWidth: Int = GRID_WIDTH
+    private val gridHeight: Int = GRID_HEIGHT
     private var robotX: Double = INITIAL_ROBOT_X
     private var robotY: Double = INITIAL_ROBOT_Y
 
-    private var gridSquareSize: Double = 0.0;
-    private var canvas: Canvas = Canvas();
+    private var gridSquareSize: Double = 0.0
+    private var canvas: Canvas = Canvas()
 
     private var listeners: MutableList<ArenaListener>? = null
 
