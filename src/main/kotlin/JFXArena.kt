@@ -7,9 +7,6 @@ import javafx.scene.paint.Color
 import javafx.scene.text.TextAlignment
 import java.lang.AssertionError
 import java.util.*
-import kotlin.math.atan2
-import kotlin.math.cos
-import kotlin.math.sin
 
 const val IMAGE_FILE: String = "1554047213.png"
 const val GRID_WIDTH: Int = 9
@@ -19,7 +16,6 @@ const val INITIAL_ROBOT_Y: Double = 3.0
 const val CENTER_OFFSET: Double = 0.5
 const val LABEL_OFFSET: Double = 1.0
 const val ROBOT_NAME: String = "ROBOT"
-const val LINE_RADIUS: Double = 0.5
 
 class JFXArena : Pane() {
     private var robot: Image
