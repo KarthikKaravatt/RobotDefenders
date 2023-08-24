@@ -53,11 +53,11 @@ class JFXArena : Pane() {
         val yPositions: List<Int> = listOf(0, GRID_HEIGHT - 1)
         var x: Int = xPositions.random()
         var y: Int = yPositions.random()
-        var delay: Int = Random.nextInt(MAX_DELAY, MAX_DELAY)
+        var delay: Int = Random.nextInt(MIN_DELAY, MAX_DELAY)
         while (robots.values.any { it.x == x.toDouble() && it.y == y.toDouble() }) {
             x = xPositions.random()
             y = yPositions.random()
-            delay = Random.nextInt(MAX_DELAY, MAX_DELAY)
+            delay = Random.nextInt(MIN_DELAY, MAX_DELAY)
         }
         addRobot(id, x.toDouble(), y.toDouble(),delay)
     }
@@ -74,7 +74,7 @@ class JFXArena : Pane() {
     /**
      *
      */
-    fun setRobotPosition(id: Int, x: Double, y: Double) {
+    private fun setRobotPosition(id: Int, x: Double, y: Double) {
         val robot: Robot? = robots[id]
         check(robot != null) { "Robot $id does not exist" }
         robot.x = x

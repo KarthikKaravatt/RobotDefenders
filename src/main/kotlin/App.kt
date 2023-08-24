@@ -6,7 +6,6 @@ import javafx.scene.control.TextArea
 import javafx.scene.control.ToolBar
 import javafx.scene.layout.BorderPane
 import javafx.stage.Stage
-import java.util.UUID
 
 const val ARENA_WIDTH: Double = 300.0
 const val SCENE_WIDTH: Double = 800.0
