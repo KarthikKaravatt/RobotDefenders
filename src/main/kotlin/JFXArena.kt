@@ -74,7 +74,7 @@ class JFXArena : Pane() {
     /**
      *
      */
-    private fun setRobotPosition(id: Int, x: Double, y: Double) {
+    fun setRobotPosition(id: Int, x: Double, y: Double) {
         val robot: Robot? = robots[id]
         check(robot != null) { "Robot $id does not exist" }
         robot.x = x
