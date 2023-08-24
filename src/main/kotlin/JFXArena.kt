@@ -1,49 +1,87 @@
-import javafx.geometry.VPos
 import javafx.scene.canvas.Canvas
 import javafx.scene.canvas.GraphicsContext
 import javafx.scene.image.Image
 import javafx.scene.layout.Pane
 import javafx.scene.paint.Color
-import javafx.scene.text.TextAlignment
+import java.io.InputStream
 import java.lang.AssertionError
 import java.util.*
+import kotlin.random.Random
 
 const val IMAGE_FILE: String = "1554047213.png"
 const val GRID_WIDTH: Int = 9
 const val GRID_HEIGHT: Int = 9
-const val INITIAL_ROBOT_X: Double = 1.0
-const val INITIAL_ROBOT_Y: Double = 3.0
 const val CENTER_OFFSET: Double = 0.5
-const val LABEL_OFFSET: Double = 1.0
-const val ROBOT_NAME: String = "ROBOT"
+const val ROBOT_SPAWN_RATE: Long = 1500
+const val MIN_DELAY: Int = 500
+const val MAX_DELAY: Int = 2000
 
 class JFXArena : Pane() {
-    private var robot: Image
     private val gridWidth: Int = GRID_WIDTH
     private val gridHeight: Int = GRID_HEIGHT
-    private var robotX: Double = INITIAL_ROBOT_X
-    private var robotY: Double = INITIAL_ROBOT_Y
-
     private var gridSquareSize: Double = 0.0
     private var canvas: Canvas = Canvas()
+
+    private var robots: MutableMap<Int, Robot> = Collections.synchronizedMap(mutableMapOf<Int, Robot>())
 
     private var listeners: MutableList<ArenaListener>? = null
 
     init {
-        val ioStream = javaClass.classLoader.getResourceAsStream(IMAGE_FILE)
-            ?: throw AssertionError("Cannot find image file $IMAGE_FILE")
-        this.robot = Image(ioStream)
 
         this.canvas.widthProperty().bind(widthProperty())
         this.canvas.heightProperty().bind(heightProperty())
         this.children.add(canvas)
+        createSpawnRobotThread()
     }
 
-    fun setRobotPosition(x: Double, y: Double){
-        this.robotX = x
-        this.robotY = y
+    private fun createSpawnRobotThread() {
+        val spawnRobotThread = Thread {
+            while (true) {
+                Thread.sleep(ROBOT_SPAWN_RATE)
+                spawnRobot()
+            }
+        }
+        spawnRobotThread.start()
+    }
+
+    private fun spawnRobot() {
+        var id = Random.nextInt(0, Int.MAX_VALUE)
+        while (robots.containsKey(id)) {
+            id = Random.nextInt(0, Int.MAX_VALUE)
+        }
+        val xPositions: List<Int> = listOf(0, GRID_WIDTH - 1)
+        val yPositions: List<Int> = listOf(0, GRID_HEIGHT - 1)
+        var x: Int = xPositions.random()
+        var y: Int = yPositions.random()
+        var delay: Int = Random.nextInt(MAX_DELAY, MAX_DELAY)
+        while (robots.values.any { it.x == x.toDouble() && it.y == y.toDouble() }) {
+            x = xPositions.random()
+            y = yPositions.random()
+            delay = Random.nextInt(MAX_DELAY, MAX_DELAY)
+        }
+        addRobot(id, x.toDouble(), y.toDouble(),delay)
+    }
+
+
+    private fun addRobot(id: Int, x: Double, y: Double, delay: Int) {
+        val ioStream: InputStream = javaClass.classLoader.getResourceAsStream(IMAGE_FILE)
+            ?: throw AssertionError("Cannot find image file $IMAGE_FILE")
+        val robot = Robot(x, y, id, Image(ioStream), delay)
+        robots[id] = robot
         requestLayout()
     }
+
+    /**
+     *
+     */
+    fun setRobotPosition(id: Int, x: Double, y: Double) {
+        val robot: Robot? = robots[id]
+        check(robot != null) { "Robot $id does not exist" }
+        robot.x = x
+        robot.y = y
+        requestLayout()
+    }
+
     fun addListener(newListener: ArenaListener) {
         if (listeners == null) {
             listeners = LinkedList()
@@ -52,16 +90,17 @@ class JFXArena : Pane() {
                 val gridY = (event.y / gridSquareSize).toInt()
 
                 if (gridX < gridWidth && gridY < gridHeight) {
-                    listeners?.let {nonNullListeners ->
-                       for(listener in nonNullListeners) {
-                           listener.squareClicked(gridX,gridY)
-                       }
+                    listeners?.let { nonNullListeners ->
+                        for (listener in nonNullListeners) {
+                            listener.squareClicked(gridX, gridY)
+                        }
                     }
                 }
             }
         }
         listeners?.add(newListener)
     }
+
     override fun layoutChildren() {
         super.layoutChildren()
         val gfx = canvas.graphicsContext2D
@@ -69,7 +108,8 @@ class JFXArena : Pane() {
 
         gridSquareSize = minOf(
             width / gridWidth,
-            height / gridHeight)
+            height / gridHeight
+        )
 
         val arenaPixelWidth = gridWidth * gridSquareSize
         val arenaPixelHeight = gridHeight * gridSquareSize
@@ -87,15 +127,19 @@ class JFXArena : Pane() {
             gfx.strokeLine(0.0, y, arenaPixelWidth, y)
         }
 
-        drawImage(gfx, robot, robotX, robotY)
-        drawLabel(gfx, ROBOT_NAME, robotX, robotY)
+        for (robot in robots.values) {
+            drawImage(gfx, robot.robotImage, robot.x, robot.y, robot.robotId)
+        }
     }
-    private fun drawImage(gfx: GraphicsContext, image: Image, gridX: Double, gridY: Double) {
+
+    private fun drawImage(gfx: GraphicsContext, image: Image, gridX: Double, gridY: Double, id: Int) {
+        val robot: Robot? = robots[id]
+        check(robot != null) { "Robot $id does not exist" }
         val x = (gridX + CENTER_OFFSET) * gridSquareSize
         val y = (gridY + CENTER_OFFSET) * gridSquareSize
 
-        val fullSizePixelWidth = robot.width
-        val fullSizePixelHeight = robot.height
+        val fullSizePixelWidth = robot.robotImage.width
+        val fullSizePixelHeight = robot.robotImage.height
 
         val displayedPixelWidth: Double
         val displayedPixelHeight: Double
@@ -116,12 +160,12 @@ class JFXArena : Pane() {
         )
     }
 
-    private fun drawLabel(gfx: GraphicsContext, label: String, gridX: Double, gridY: Double) {
-        gfx.textAlign = TextAlignment.CENTER
-        gfx.textBaseline = VPos.TOP
-        gfx.stroke = Color.BLUE
-        gfx.strokeText(label, (gridX + CENTER_OFFSET) * gridSquareSize, (gridY + LABEL_OFFSET) * gridSquareSize)
-    }
+//    private fun drawLabel(gfx: GraphicsContext, label: String, gridX: Double, gridY: Double) {
+//        gfx.textAlign = TextAlignment.CENTER
+//        gfx.textBaseline = VPos.TOP
+//        gfx.stroke = Color.BLUE
+//        gfx.strokeText(label, (gridX + CENTER_OFFSET) * gridSquareSize, (gridY + LABEL_OFFSET) * gridSquareSize)
+//    }
 
     //private fun drawLine(
     //    gfx: GraphicsContext,
