@@ -88,7 +88,7 @@ class JFXArena : Pane() {
         val yDirection: Int = if (vector.y < 0) MOVE_DOWN else MOVE_UP
         val x: Double = robot.pos.x + xDirection
         val y: Double = robot.pos.y + yDirection
-        val moves = mapOf( "Horizontal" to x, "Vertical" to y)
+        val moves = mapOf("Horizontal" to x, "Vertical" to y)
         val move = moves.keys.random()
 
         if (x == centerPoint.x && y == centerPoint.y) {
@@ -151,10 +151,8 @@ class JFXArena : Pane() {
     private fun moveRobotPosition(id: Int, x: Double, y: Double) {
         val robot: Robot? = robots[id]
         check(robot != null) { "Robot $id does not exist" }
-        var xPos = x
-        var yPos = y
-        xPos = x.coerceIn(0.0, GRID_WIDTH - 1.0)
-        yPos = y.coerceIn(0.0, GRID_HEIGHT - 1.0)
+        val xPos = x.coerceIn(0.0, GRID_WIDTH - 1.0)
+        val yPos = y.coerceIn(0.0, GRID_HEIGHT - 1.0)
         robot.updateFuturePos(Point(xPos, yPos))
         Thread.sleep(robot.delay.toLong())
         robot.updatePos(Point(xPos, yPos))
