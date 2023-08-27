@@ -27,6 +27,8 @@ const val MOVE_RIGHT: Int = 1
 const val ROBOT_ID_CLAMP: Int = 10000
 const val CENTER_X: Double = 4.0
 const val CENTER_Y: Double = 4.0
+const val MOVEMENT_ANIMATION_DELAY: Int = 400
+const val MOVEMENT_ANIMATION_INTERVALS: Long = 10
 
 class JFXArena : Pane() {
     private val gridWidth: Int = GRID_WIDTH
@@ -81,6 +83,48 @@ class JFXArena : Pane() {
 
     }
 
+    private fun moveRobotPosition(id: Int, x: Double, y: Double) {
+        val robot: Robot? = robots[id]
+        check(robot != null) { "Robot $id does not exist" }
+        // Does not allow the robot to move outside the grid
+        val xPos = x.coerceIn(0.0, GRID_WIDTH - 1.0)
+        val yPos = y.coerceIn(0.0, GRID_HEIGHT - 1.0)
+        // Claims a position on the grid
+        robot.updateFuturePos(Point(xPos, yPos))
+        val startTime = System.currentTimeMillis()
+        while (System.currentTimeMillis() - startTime < MOVEMENT_ANIMATION_DELAY) {
+            // Calculates the progress of the animation, it always from the starting pos to the end pos
+            val progress = (System.currentTimeMillis() - startTime).toDouble() / MOVEMENT_ANIMATION_DELAY
+            val currentX = robot.pos.x + (xPos - robot.pos.x) * progress
+            val currentY = robot.pos.y + (yPos - robot.pos.y) * progress
+            robot.updatePos(Point(currentX, currentY))
+            //makes the animation smoother
+            Thread.sleep(MOVEMENT_ANIMATION_INTERVALS)
+            Platform.runLater {
+                requestLayout()
+            }
+        }
+        robot.updatePos(Point(xPos, yPos))
+    }
+
+    private fun isRobotAbleToMove(id: Int, endX: Double, endY: Double, curX: Double, curY: Double): Boolean {
+        val centerPoint = Point(CENTER_X, CENTER_Y)
+        var ableToMove = true
+        if (endX == centerPoint.x && endY == centerPoint.y) {
+            robots.remove(id)
+            gameOver = true
+            ableToMove = false
+        } else if (endX == centerPoint.x && curY == centerPoint.y) {
+            robots.remove(id)
+            gameOver = true
+            ableToMove = false
+        } else if (endY == centerPoint.y && curX == centerPoint.x) {
+            robots.remove(id)
+            gameOver = true
+            ableToMove = false
+        }
+        return ableToMove
+    }
     private fun moveRobot(id: Int) {
         val robot: Robot? = robots[id]
         check(robot != null) { "Robot $id does not exist" }
@@ -90,30 +134,17 @@ class JFXArena : Pane() {
         val yDirection: Int = if (vector.y < 0) MOVE_DOWN else MOVE_UP
         val x: Double = robot.pos.x + xDirection
         val y: Double = robot.pos.y + yDirection
-
-        if (x == centerPoint.x && y == centerPoint.y) {
-            robots.remove(id)
-            gameOver = true
-            return
-        }
-        if (x == centerPoint.x && robot.pos.y == centerPoint.y) {
-            robots.remove(id)
-            gameOver = true
-            return
-        }
-        if (y == centerPoint.y && robot.pos.x == centerPoint.x) {
-            robots.remove(id)
-            gameOver = true
-            return
-        }
-        if (robot.pos.x == centerPoint.x && !isRobotAtPosition(robot.pos.x.toInt(), y.toInt())) {
-            moveRobotPosition(id, robot.pos.x, y)
-        } else if (robot.pos.y == centerPoint.y && !isRobotAtPosition(x.toInt(), robot.pos.y.toInt())) {
-            moveRobotPosition(id, x, robot.pos.y)
-        } else if (!isRobotAtPosition(robot.pos.x.toInt(), y.toInt())) {
-            moveRobotPosition(id, robot.pos.x, y)
-        } else if (!isRobotAtPosition(x.toInt(), robot.pos.y.toInt())) {
-            moveRobotPosition(id, x, robot.pos.y)
+        val ableToMove = isRobotAbleToMove(id, x, y, robot.pos.x, robot.pos.y)
+        if (ableToMove) {
+            if (robot.pos.x == centerPoint.x && !isRobotAtPosition(robot.pos.x.toInt(), y.toInt())) {
+                moveRobotPosition(id, robot.pos.x, y)
+            } else if (robot.pos.y == centerPoint.y && !isRobotAtPosition(x.toInt(), robot.pos.y.toInt())) {
+                moveRobotPosition(id, x, robot.pos.y)
+            } else if (!isRobotAtPosition(robot.pos.x.toInt(), y.toInt())) {
+                moveRobotPosition(id, robot.pos.x, y)
+            } else if (!isRobotAtPosition(x.toInt(), robot.pos.y.toInt())) {
+                moveRobotPosition(id, x, robot.pos.y)
+            }
         }
     }
 
@@ -162,18 +193,6 @@ class JFXArena : Pane() {
     /**
      *
      */
-    private fun moveRobotPosition(id: Int, x: Double, y: Double) {
-        val robot: Robot? = robots[id]
-        check(robot != null) { "Robot $id does not exist" }
-        val xPos = x.coerceIn(0.0, GRID_WIDTH - 1.0)
-        val yPos = y.coerceIn(0.0, GRID_HEIGHT - 1.0)
-        robot.updateFuturePos(Point(xPos, yPos))
-        Thread.sleep(robot.delay.toLong())
-        robot.updatePos(Point(xPos, yPos))
-        Platform.runLater {
-            requestLayout()
-        }
-    }
 
     fun addListener(newListener: ArenaListener) {
         if (listeners == null) {

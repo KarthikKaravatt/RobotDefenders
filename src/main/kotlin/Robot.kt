@@ -19,6 +19,7 @@ class Robot(
         require(pos.y >= 0) { "Robot y position must be non-negative" }
     }
 
+    // TODO: Maybe get rid of the locks?
     fun updatePos(newPos: Point) {
         synchronized(this) {
             pos = newPos
