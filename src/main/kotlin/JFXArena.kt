@@ -9,6 +9,7 @@ import javafx.scene.text.TextAlignment
 import java.io.InputStream
 import java.util.*
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.random.Random
 
 const val ROBOT_IMAGE_FILE: String = "1554047213.png"
@@ -37,7 +38,7 @@ class JFXArena : Pane() {
     private var canvas: Canvas = Canvas()
 
     private var robots: MutableMap<Int, Robot> = Collections.synchronizedMap(mutableMapOf<Int, Robot>())
-    private var gameOver: Boolean = false
+    private var gameOver: AtomicBoolean = AtomicBoolean(false)
 
     private var listeners: MutableList<ArenaListener>? = null
 
@@ -54,7 +55,7 @@ class JFXArena : Pane() {
 
     private fun createSpawnRobotThread() {
         val spawnRobotThread = Thread {
-            while (gameOver.not()) {
+            while (!gameOver.get()) {
                 Thread.sleep(ROBOT_SPAWN_RATE)
                 spawnRobot()
             }
@@ -62,90 +63,6 @@ class JFXArena : Pane() {
         // Stops thread when the main thread is stopped
         spawnRobotThread.isDaemon = true
         spawnRobotThread.start()
-    }
-
-    private fun createRobotAiThread(id: Int) {
-        val robot: Robot? = robots[id]
-        check(robot != null) { "Robot $id does not exist" }
-        val robotAiTask = Runnable {
-            val centerPoint = Point(CENTER_X, CENTER_Y)
-            while (robot.pos != centerPoint && gameOver.not()) {
-                Thread.sleep(robot.delay.toLong())
-                if (robots.containsKey(id)) {
-                    moveRobot(id)
-                } else {
-                    Platform.runLater { requestLayout() }
-                }
-            }
-            executionService.shutdown()
-        }
-        executionService.execute(robotAiTask)
-
-    }
-
-    private fun moveRobotPosition(id: Int, x: Double, y: Double) {
-        val robot: Robot? = robots[id]
-        check(robot != null) { "Robot $id does not exist" }
-        // Does not allow the robot to move outside the grid
-        val xPos = x.coerceIn(0.0, GRID_WIDTH - 1.0)
-        val yPos = y.coerceIn(0.0, GRID_HEIGHT - 1.0)
-        // Claims a position on the grid
-        robot.updateFuturePos(Point(xPos, yPos))
-        val startTime = System.currentTimeMillis()
-        while (System.currentTimeMillis() - startTime < MOVEMENT_ANIMATION_DELAY) {
-            // Calculates the progress of the animation, it always from the starting pos to the end pos
-            val progress = (System.currentTimeMillis() - startTime).toDouble() / MOVEMENT_ANIMATION_DELAY
-            val currentX = robot.pos.x + (xPos - robot.pos.x) * progress
-            val currentY = robot.pos.y + (yPos - robot.pos.y) * progress
-            robot.updatePos(Point(currentX, currentY))
-            //makes the animation smoother
-            Thread.sleep(MOVEMENT_ANIMATION_INTERVALS)
-            Platform.runLater {
-                requestLayout()
-            }
-        }
-        robot.updatePos(Point(xPos, yPos))
-    }
-
-    private fun isRobotAbleToMove(id: Int, endX: Double, endY: Double, curX: Double, curY: Double): Boolean {
-        val centerPoint = Point(CENTER_X, CENTER_Y)
-        var ableToMove = true
-        if (endX == centerPoint.x && endY == centerPoint.y) {
-            robots.remove(id)
-            gameOver = true
-            ableToMove = false
-        } else if (endX == centerPoint.x && curY == centerPoint.y) {
-            robots.remove(id)
-            gameOver = true
-            ableToMove = false
-        } else if (endY == centerPoint.y && curX == centerPoint.x) {
-            robots.remove(id)
-            gameOver = true
-            ableToMove = false
-        }
-        return ableToMove
-    }
-    private fun moveRobot(id: Int) {
-        val robot: Robot? = robots[id]
-        check(robot != null) { "Robot $id does not exist" }
-        val centerPoint = Point(CENTER_X, CENTER_Y)
-        val vector: Point = vector(robot.pos, centerPoint)
-        val xDirection: Int = if (vector.x > 0) MOVE_RIGHT else MOVE_LEFT
-        val yDirection: Int = if (vector.y < 0) MOVE_DOWN else MOVE_UP
-        val x: Double = robot.pos.x + xDirection
-        val y: Double = robot.pos.y + yDirection
-        val ableToMove = isRobotAbleToMove(id, x, y, robot.pos.x, robot.pos.y)
-        if (ableToMove) {
-            if (robot.pos.x == centerPoint.x && !isRobotAtPosition(robot.pos.x.toInt(), y.toInt())) {
-                moveRobotPosition(id, robot.pos.x, y)
-            } else if (robot.pos.y == centerPoint.y && !isRobotAtPosition(x.toInt(), robot.pos.y.toInt())) {
-                moveRobotPosition(id, x, robot.pos.y)
-            } else if (!isRobotAtPosition(robot.pos.x.toInt(), y.toInt())) {
-                moveRobotPosition(id, robot.pos.x, y)
-            } else if (!isRobotAtPosition(x.toInt(), robot.pos.y.toInt())) {
-                moveRobotPosition(id, x, robot.pos.y)
-            }
-        }
     }
 
     private fun spawnRobot() {
@@ -163,8 +80,8 @@ class JFXArena : Pane() {
             y = yPositions.random()
         }
         addRobot(id, x.toDouble(), y.toDouble(), delay)
-        if (gameOver.not()) {
-            createRobotAiThread(id)
+        if (!gameOver.get()) {
+            robots[id]?.createRobotAiThread(robots, executionService, gameOver, this)
         }
     }
 
@@ -278,6 +195,10 @@ class JFXArena : Pane() {
         gfx.textBaseline = VPos.TOP
         gfx.stroke = Color.BLUE
         gfx.strokeText(label, (gridX + CENTER_OFFSET) * gridSquareSize, (gridY + LABEL_OFFSET) * gridSquareSize)
+    }
+
+    fun setGameOver() {
+        gameOver.set(true)
     }
 
     //private fun drawLine(
