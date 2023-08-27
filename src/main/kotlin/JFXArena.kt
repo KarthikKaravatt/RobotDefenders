@@ -7,7 +7,6 @@ import javafx.scene.layout.Pane
 import javafx.scene.paint.Color
 import javafx.scene.text.TextAlignment
 import java.io.InputStream
-import java.lang.AssertionError
 import java.util.*
 import java.util.concurrent.Executors
 import kotlin.random.Random
@@ -26,8 +25,8 @@ const val MOVE_DOWN: Int = -1
 const val MOVE_LEFT: Int = -1
 const val MOVE_RIGHT: Int = 1
 const val ROBOT_ID_CLAMP: Int = 10000
-const val CENTER_X: Double = (GRID_WIDTH - 1).div(2.0)
-const val CENTER_Y: Double = (GRID_HEIGHT - 1).div(2.0)
+const val CENTER_X: Double = 4.0
+const val CENTER_Y: Double = 4.0
 
 class JFXArena : Pane() {
     private val gridWidth: Int = GRID_WIDTH
@@ -36,7 +35,7 @@ class JFXArena : Pane() {
     private var canvas: Canvas = Canvas()
 
     private var robots: MutableMap<Int, Robot> = Collections.synchronizedMap(mutableMapOf<Int, Robot>())
-//    private var mapMatrix: MutableList<MutableList<Int>> = MutableList(GRID_WIDTH) { MutableList(GRID_HEIGHT) { -1 } }
+    private var gameOver: Boolean = false
 
     private var listeners: MutableList<ArenaListener>? = null
 
@@ -53,7 +52,7 @@ class JFXArena : Pane() {
 
     private fun createSpawnRobotThread() {
         val spawnRobotThread = Thread {
-            while (true) {
+            while (gameOver.not()) {
                 Thread.sleep(ROBOT_SPAWN_RATE)
                 spawnRobot()
             }
@@ -68,12 +67,15 @@ class JFXArena : Pane() {
         check(robot != null) { "Robot $id does not exist" }
         val robotAiTask = Runnable {
             val centerPoint = Point(CENTER_X, CENTER_Y)
-            while (robot.pos != centerPoint) {
+            while (robot.pos != centerPoint && gameOver.not()) {
                 Thread.sleep(robot.delay.toLong())
                 if (robots.containsKey(id)) {
                     moveRobot(id)
+                } else {
+                    Platform.runLater { requestLayout() }
                 }
             }
+            executionService.shutdown()
         }
         executionService.execute(robotAiTask)
 
@@ -88,20 +90,30 @@ class JFXArena : Pane() {
         val yDirection: Int = if (vector.y < 0) MOVE_DOWN else MOVE_UP
         val x: Double = robot.pos.x + xDirection
         val y: Double = robot.pos.y + yDirection
-        val moves = mapOf("Horizontal" to x, "Vertical" to y)
-        val move = moves.keys.random()
 
         if (x == centerPoint.x && y == centerPoint.y) {
             robots.remove(id)
+            gameOver = true
             return
         }
-        if (isRobotAtPosition(x.toInt(), y.toInt())) {
+        if (x == centerPoint.x && robot.pos.y == centerPoint.y) {
+            robots.remove(id)
+            gameOver = true
             return
         }
-        if (move == "Horizontal") {
-            moveRobotPosition(id, x, robot.pos.y)
-        } else {
+        if (y == centerPoint.y && robot.pos.x == centerPoint.x) {
+            robots.remove(id)
+            gameOver = true
+            return
+        }
+        if (robot.pos.x == centerPoint.x && !isRobotAtPosition(robot.pos.x.toInt(), y.toInt())) {
             moveRobotPosition(id, robot.pos.x, y)
+        } else if (robot.pos.y == centerPoint.y && !isRobotAtPosition(x.toInt(), robot.pos.y.toInt())) {
+            moveRobotPosition(id, x, robot.pos.y)
+        } else if (!isRobotAtPosition(robot.pos.x.toInt(), y.toInt())) {
+            moveRobotPosition(id, robot.pos.x, y)
+        } else if (!isRobotAtPosition(x.toInt(), robot.pos.y.toInt())) {
+            moveRobotPosition(id, x, robot.pos.y)
         }
     }
 
@@ -120,7 +132,9 @@ class JFXArena : Pane() {
             y = yPositions.random()
         }
         addRobot(id, x.toDouble(), y.toDouble(), delay)
-        createRobotAiThread(id)
+        if (gameOver.not()) {
+            createRobotAiThread(id)
+        }
     }
 
     private fun isRobotAtPosition(x: Int, y: Int): Boolean {
