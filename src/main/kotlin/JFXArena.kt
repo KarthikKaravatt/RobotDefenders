@@ -1,4 +1,3 @@
-import javafx.application.Platform
 import javafx.geometry.VPos
 import javafx.scene.canvas.Canvas
 import javafx.scene.canvas.GraphicsContext
@@ -8,9 +7,6 @@ import javafx.scene.paint.Color
 import javafx.scene.text.TextAlignment
 import java.io.InputStream
 import java.util.*
-import java.util.concurrent.Executors
-import java.util.concurrent.atomic.AtomicBoolean
-import kotlin.random.Random
 
 const val ROBOT_IMAGE_FILE: String = "1554047213.png"
 const val CITADEL_IMAGE_FILE: String = "rg1024-isometric-tower.png"
@@ -34,15 +30,12 @@ const val MOVEMENT_ANIMATION_INTERVALS: Long = 10
 class JFXArena : Pane() {
     private val gridWidth: Int = GRID_WIDTH
     private val gridHeight: Int = GRID_HEIGHT
+
     private var gridSquareSize: Double = 0.0
     private var canvas: Canvas = Canvas()
-
-    private var robots: MutableMap<Int, Robot> = Collections.synchronizedMap(mutableMapOf<Int, Robot>())
-    private var gameOver: AtomicBoolean = AtomicBoolean(false)
-
     private var listeners: MutableList<ArenaListener>? = null
 
-    private val executionService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors())
+    private val game = Game(this)
 
 
     init {
@@ -50,63 +43,13 @@ class JFXArena : Pane() {
         this.canvas.widthProperty().bind(widthProperty())
         this.canvas.heightProperty().bind(heightProperty())
         this.children.add(canvas)
-        createSpawnRobotThread()
+        game.createSpawnRobotThread()
     }
 
-    private fun createSpawnRobotThread() {
-        val spawnRobotThread = Thread {
-            while (!gameOver.get()) {
-                Thread.sleep(ROBOT_SPAWN_RATE)
-                spawnRobot()
-            }
-        }
-        // Stops thread when the main thread is stopped
-        spawnRobotThread.isDaemon = true
-        spawnRobotThread.start()
+    private fun loadImage(file: String): InputStream {
+        return javaClass.classLoader.getResourceAsStream(file)
+            ?: throw AssertionError("Cannot find image file $file")
     }
-
-    private fun spawnRobot() {
-        var id = Random.nextInt(0, Int.MAX_VALUE) % ROBOT_ID_CLAMP
-        while (robots.containsKey(id)) {
-            id = Random.nextInt(0, Int.MAX_VALUE) % ROBOT_ID_CLAMP
-        }
-        val xPositions: List<Int> = listOf(0, GRID_WIDTH - 1)
-        val yPositions: List<Int> = listOf(0, GRID_HEIGHT - 1)
-        var x: Int = xPositions.random()
-        var y: Int = yPositions.random()
-        val delay: Int = Random.nextInt(MIN_DELAY, MAX_DELAY)
-        while (isRobotAtPosition(x, y)) {
-            x = xPositions.random()
-            y = yPositions.random()
-        }
-        addRobot(id, x.toDouble(), y.toDouble(), delay)
-        if (!gameOver.get()) {
-            robots[id]?.createRobotAiThread(robots, executionService, gameOver, this)
-        }
-    }
-
-    private fun isRobotAtPosition(x: Int, y: Int): Boolean {
-        return robots.values.any {
-            it.pos.x == x.toDouble() && it.pos.y == y.toDouble() ||
-                    it.futurePos.x == x.toDouble() && it.futurePos.y == y.toDouble()
-        }
-    }
-
-    private fun loadCitadelImage(): InputStream {
-        return javaClass.classLoader.getResourceAsStream(CITADEL_IMAGE_FILE)
-            ?: throw AssertionError("Cannot find image file $CITADEL_IMAGE_FILE")
-    }
-
-    private fun addRobot(id: Int, x: Double, y: Double, delay: Int) {
-        val ioStream: InputStream = javaClass.classLoader.getResourceAsStream(ROBOT_IMAGE_FILE)
-            ?: throw AssertionError("Cannot find image file $ROBOT_IMAGE_FILE")
-        val robot = Robot(id, Point(x, y), Image(ioStream), delay)
-        robots[id] = robot
-        Platform.runLater {
-            requestLayout()
-        }
-    }
-
     /**
      *
      */
@@ -142,7 +85,7 @@ class JFXArena : Pane() {
 
         val arenaPixelWidth = gridWidth * gridSquareSize
         val arenaPixelHeight = gridHeight * gridSquareSize
-        val citadelImage = Image(loadCitadelImage())
+        val citadelImage = Image(loadImage(CITADEL_IMAGE_FILE))
 
         gfx.stroke = Color.DARKGREY
         gfx.strokeRect(0.0, 0.0, arenaPixelWidth - 1.0, arenaPixelHeight - 1.0)
@@ -156,9 +99,8 @@ class JFXArena : Pane() {
             val y = gridY * gridSquareSize
             gfx.strokeLine(0.0, y, arenaPixelWidth, y)
         }
-
-        for (robot in robots.values) {
-            drawImage(gfx, robot.robotImage, robot.pos.x, robot.pos.y)
+        for (robot in game.robots.values) {
+            drawImage(gfx, robot.image, robot.pos.x, robot.pos.y)
             drawLabel(gfx, robot.robotID.toString(), robot.pos.x, robot.pos.y)
         }
         drawImage(gfx, citadelImage, CENTER_X, CENTER_Y)
@@ -198,7 +140,7 @@ class JFXArena : Pane() {
     }
 
     fun setGameOver() {
-        gameOver.set(true)
+        game.setGameOver()
     }
 
     //private fun drawLine(

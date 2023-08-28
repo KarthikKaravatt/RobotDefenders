@@ -1,6 +1,3 @@
-import kotlin.math.pow
-import kotlin.math.sqrt
-
 data class Point(var x: Double, var y: Double)
 
 //fun distance(p1: Point, p2: Point): Double {
