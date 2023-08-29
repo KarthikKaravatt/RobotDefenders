@@ -10,6 +10,7 @@ import java.util.*
 
 const val ROBOT_IMAGE_FILE: String = "1554047213.png"
 const val CITADEL_IMAGE_FILE: String = "rg1024-isometric-tower.png"
+const val WALL_IMAGE_FILE: String = "181478.png"
 const val GRID_WIDTH: Int = 9
 const val GRID_HEIGHT: Int = 9
 const val CENTER_OFFSET: Double = 0.5
@@ -43,7 +44,7 @@ class JFXArena : Pane() {
         this.canvas.widthProperty().bind(widthProperty())
         this.canvas.heightProperty().bind(heightProperty())
         this.children.add(canvas)
-        game.createSpawnRobotThread()
+        game.startGame()
     }
 
     private fun loadImage(file: String): InputStream {
@@ -99,10 +100,17 @@ class JFXArena : Pane() {
             val y = gridY * gridSquareSize
             gfx.strokeLine(0.0, y, arenaPixelWidth, y)
         }
-        for (robot in game.robots.values) {
+
+        // render robots and id
+        for (robot in game.robotMap.values) {
             drawImage(gfx, robot.image, robot.pos.x, robot.pos.y)
             drawLabel(gfx, robot.robotID.toString(), robot.pos.x, robot.pos.y)
         }
+        // render walls
+        for (wall in game.walls.values) {
+            drawImage(gfx, wall.image, wall.pos.x, wall.pos.y)
+        }
+        // render citadel
         drawImage(gfx, citadelImage, CENTER_X, CENTER_Y)
     }
 

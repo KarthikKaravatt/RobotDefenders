@@ -21,12 +21,12 @@ class App: Application() {
     override fun start(stage: Stage) {
         stage.title = "Example App (JavaFX)"
         val arena = JFXArena()
-        val listener = object : ArenaListener {
-            override fun squareClicked(x: Int, y: Int) {
-                println("Square clicked: $x, $y")
-            }
-        }
-        arena.addListener(listener)
+//        val listener = object : ArenaListener {
+//            override fun squareClicked(x: Int, y: Int) {
+//                println("Square clicked: $x, $y")
+//            }
+//        }
+//        arena.addListener(listener)
         val toolbar = ToolBar()
 
         val label = Label("Score: 999")

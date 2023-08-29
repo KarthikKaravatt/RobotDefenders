@@ -7,49 +7,86 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.random.Random
 
 class Game(private val arena: JFXArena) {
-    var robots: MutableMap<Int, Robot> = Collections.synchronizedMap(mutableMapOf<Int, Robot>())
+    var walls: MutableMap<Point, Wall> = Collections.synchronizedMap(mutableMapOf<Point, Wall>())
+        private set
+    var robotMap: MutableMap<Int, Robot> = Collections.synchronizedMap(mutableMapOf<Int, Robot>())
+        private set
     private var gameOver: AtomicBoolean = AtomicBoolean(false)
     private val executionService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors())
+
 
     private fun addRobot(id: Int, x: Double, y: Double, delay: Int) {
         val ioStream: InputStream = javaClass.classLoader.getResourceAsStream(ROBOT_IMAGE_FILE)
             ?: throw AssertionError("Cannot find image file $ROBOT_IMAGE_FILE")
         val robot = Robot(id, Point(x, y), Image(ioStream), delay)
-
-        robots[id] = robot
+        robotMap[id] = robot
         Platform.runLater {
             arena.requestLayout()
         }
     }
 
     private fun isRobotAtPosition(x: Int, y: Int): Boolean {
-        return robots.values.any {
+        return robotMap.values.any {
             it.pos.x == x.toDouble() && it.pos.y == y.toDouble() ||
                     it.futurePos.x == x.toDouble() && it.futurePos.y == y.toDouble()
         }
     }
 
+    private fun isWallAtPosition(x: Int, y: Int): Boolean {
+        return walls.containsKey(Point(x.toDouble(), y.toDouble()))
+    }
+
     private fun spawnRobot() {
+        // Generate a unique id for the robot
         var id = Random.nextInt(0, Int.MAX_VALUE) % ROBOT_ID_CLAMP
-        while (robots.containsKey(id)) {
+        while (robotMap.containsKey(id)) {
             id = Random.nextInt(0, Int.MAX_VALUE) % ROBOT_ID_CLAMP
         }
+        // Choose a random position at the edge of the grid
         val xPositions: List<Int> = listOf(0, GRID_WIDTH - 1)
         val yPositions: List<Int> = listOf(0, GRID_HEIGHT - 1)
-        var x: Int = xPositions.random()
-        var y: Int = yPositions.random()
-        val delay: Int = Random.nextInt(MIN_DELAY, MAX_DELAY)
-        while (isRobotAtPosition(x, y)) {
+        var x: Int
+        var y: Int
+        do {
             x = xPositions.random()
             y = yPositions.random()
-        }
+        } while (isRobotAtPosition(x, y) || isWallAtPosition(x, y))
+        // Create a robot with a random delay
+        val delay: Int = Random.nextInt(MIN_DELAY, MAX_DELAY)
         addRobot(id, x.toDouble(), y.toDouble(), delay)
+        // Start the robot AI thread if the game is not over
         if (!gameOver.get()) {
-            robots[id]?.let { createRobotAiThread(it) }
+            robotMap[id]?.let { createRobotAiThread(it) }
         }
     }
 
-    fun createSpawnRobotThread() {
+    fun startGame() {
+        val listener = object : ArenaListener {
+            override fun squareClicked(x: Int, y: Int) {
+                val clickedPoint = Point(x.toDouble(), y.toDouble())
+                // Cannot place wall on spawn points or center point
+                val illegalPoints = setOf(
+                    Point(CENTER_X, CENTER_Y),
+                    Point(GRID_WIDTH.toDouble() - 1, GRID_HEIGHT.toDouble() - 1),
+                    Point(0.0, 0.0),
+                    Point(GRID_WIDTH.toDouble() - 1, 0.0),
+                    Point(0.0, GRID_HEIGHT.toDouble() - 1)
+                )
+                // Cannot place a wall on top of another wall or robot
+                if (!walls.containsKey(clickedPoint) &&
+                    !isRobotAtPosition(clickedPoint.x.toInt(), clickedPoint.y.toInt()) &&
+                    clickedPoint !in illegalPoints
+                ) {
+                    val ioStream: InputStream = javaClass.classLoader.getResourceAsStream(WALL_IMAGE_FILE)
+                        ?: throw AssertionError("Cannot find image file $WALL_IMAGE_FILE")
+                    walls[clickedPoint] = Wall(clickedPoint, Image(ioStream))
+                    Platform.runLater { arena.requestLayout() }
+                }
+            }
+        }
+        arena.addListener(listener)
+
+        // spawn the robots
         val spawnRobotThread = Thread {
             while (!gameOver.get()) {
                 Thread.sleep(ROBOT_SPAWN_RATE)
@@ -61,28 +98,23 @@ class Game(private val arena: JFXArena) {
         spawnRobotThread.start()
     }
 
-    private fun isRobotAbleToMove(
+    private fun isRobotAboutToWin(
         endX: Double,
         endY: Double,
         robot: Robot
     ): Boolean {
         val centerPoint = Point(CENTER_X, CENTER_Y)
-        var ableToMove = true
-        if (endX == centerPoint.x && endY == centerPoint.y) {
-            robots.remove(robot.robotID)
+        val isMovingToCenter = endX == centerPoint.x && endY == centerPoint.y
+        val isMovingHorizontallyThroughCenter = endX == centerPoint.x && robot.pos.y == centerPoint.y
+        val isMovingVerticallyThroughCenter = endY == centerPoint.y && robot.pos.x == centerPoint.x
+        if (isMovingToCenter || isMovingHorizontallyThroughCenter || isMovingVerticallyThroughCenter) {
+            robotMap.remove(robot.robotID)
             arena.setGameOver()
-            ableToMove = false
-        } else if (endX == centerPoint.x && robot.pos.y == centerPoint.y) {
-            robots.remove(robot.robotID)
-            arena.setGameOver()
-            ableToMove = false
-        } else if (endY == centerPoint.y && robot.pos.x == centerPoint.x) {
-            robots.remove(robot.robotID)
-            arena.setGameOver()
-            ableToMove = false
+            return false
         }
-        return ableToMove
+        return true
     }
+
 
     private fun moveRobotPosition(x: Double, y: Double, robot: Robot) {
         // Does not allow the robot to move outside the grid
@@ -106,6 +138,22 @@ class Game(private val arena: JFXArena) {
         robot.updatePos(Point(xPos, yPos))
     }
 
+    private fun handleWallCollision(x: Double, y: Double, robot: Robot) {
+        if (isWallAtPosition(x.toInt(), y.toInt())) {
+            walls[Point(x, y)]?.let { wall ->
+                if (wall.getDamaged()) {
+                    walls.remove(Point(x, y))
+                } else {
+                    wall.setDamaged()
+                }
+                robotMap.remove(robot.robotID)
+                Platform.runLater { arena.requestLayout() }
+            }
+        } else {
+            moveRobotPosition(x, y, robot)
+        }
+    }
+
     private fun moveRobot(robot: Robot) {
         val centerPoint = Point(CENTER_X, CENTER_Y)
         val vector: Point = vector(robot.pos, centerPoint)
@@ -113,16 +161,20 @@ class Game(private val arena: JFXArena) {
         val yDirection: Int = if (vector.y < 0) MOVE_DOWN else MOVE_UP
         val x: Double = robot.pos.x + xDirection
         val y: Double = robot.pos.y + yDirection
-        val ableToMove = isRobotAbleToMove(x, y, robot)
-        if (ableToMove) {
-            if (robot.pos.x == centerPoint.x && !isRobotAtPosition(robot.pos.x.toInt(), y.toInt())) {
-                moveRobotPosition(robot.pos.x, y, robot)
-            } else if (robot.pos.y == centerPoint.y && !isRobotAtPosition(x.toInt(), robot.pos.y.toInt())) {
-                moveRobotPosition(x, robot.pos.y, robot)
-            } else if (!isRobotAtPosition(robot.pos.x.toInt(), y.toInt())) {
-                moveRobotPosition(robot.pos.x, y, robot)
-            } else if (!isRobotAtPosition(x.toInt(), robot.pos.y.toInt())) {
-                moveRobotPosition(x, robot.pos.y, robot)
+        if (isRobotAboutToWin(x, y, robot)) {
+            when {
+                robot.pos.x == centerPoint.x && !isRobotAtPosition(
+                    robot.pos.x.toInt(),
+                    y.toInt()
+                ) -> handleWallCollision(robot.pos.x, y, robot)
+
+                robot.pos.y == centerPoint.y && !isRobotAtPosition(
+                    x.toInt(),
+                    robot.pos.y.toInt()
+                ) -> handleWallCollision(x, robot.pos.y, robot)
+
+                !isRobotAtPosition(robot.pos.x.toInt(), y.toInt()) -> handleWallCollision(robot.pos.x, y, robot)
+                !isRobotAtPosition(x.toInt(), robot.pos.y.toInt()) -> handleWallCollision(x, robot.pos.y, robot)
             }
         }
     }
@@ -132,7 +184,7 @@ class Game(private val arena: JFXArena) {
             val centerPoint = Point(CENTER_X, CENTER_Y)
             while (robot.pos != centerPoint && !gameOver.get()) {
                 Thread.sleep(robot.delay.toLong())
-                if (robots.containsKey(robot.robotID)) {
+                if (robotMap.containsKey(robot.robotID)) {
                     moveRobot(robot)
                 } else {
                     Platform.runLater { arena.requestLayout() }
@@ -147,4 +199,5 @@ class Game(private val arena: JFXArena) {
     fun setGameOver() {
         gameOver.set(true)
     }
+
 }

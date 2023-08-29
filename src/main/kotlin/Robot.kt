@@ -3,13 +3,13 @@ import javafx.scene.image.Image
 
 class Robot(
     val robotID: Int,
-    @Volatile override var pos: Point,
-    override val image: Image,
+    @Volatile var pos: Point,
+    val image: Image,
     val delay: Int
-) : GameObject() {
+) {
 
     @Volatile
-    override var futurePos: Point = pos
+    var futurePos: Point = pos
 
     init {
         require(robotID >= 0) { "Robot id must be non-negative" }
