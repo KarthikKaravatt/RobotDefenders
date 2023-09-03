@@ -10,7 +10,8 @@ import javafx.stage.Stage
 const val ARENA_WIDTH: Double = 300.0
 const val SCENE_WIDTH: Double = 800.0
 const val SCENE_HEIGHT: Double = 800.0
-class App: Application() {
+
+class App : Application() {
     companion object {
         @JvmStatic
         fun main(args: Array<String>) {
@@ -19,35 +20,28 @@ class App: Application() {
     }
 
     override fun start(stage: Stage) {
-        stage.title = "Example App (JavaFX)"
-        val arena = JFXArena()
-//        val listener = object : ArenaListener {
-//            override fun squareClicked(x: Int, y: Int) {
-//                println("Square clicked: $x, $y")
-//            }
-//        }
-//        arena.addListener(listener)
-        val toolbar = ToolBar()
-
-        val label = Label("Score: 999")
-
-        toolbar.items.addAll(label)
-
+        stage.title = "Robot Defender"
         val logger = TextArea()
-        logger.appendText("Hello\n")
-        logger.appendText("World\n")
-
+        val statusTextArea = TextArea()
+        val arena = JFXArena(logger, statusTextArea)
+        val toolbar = ToolBar()
+        val label = Label("Score: 999")
         val splitPane = SplitPane()
-        splitPane.items.addAll(arena, logger)
-        arena.minWidth =ARENA_WIDTH
-
         val contentPane = BorderPane()
+        logger.isEditable = false
+        toolbar.items.addAll(label)
+        splitPane.items.addAll(arena, logger)
+        arena.minWidth = ARENA_WIDTH
         contentPane.top = toolbar
         contentPane.center = splitPane
+        statusTextArea.isEditable = false
+        contentPane.bottom = statusTextArea
 
         val scene = Scene(contentPane, SCENE_WIDTH, SCENE_HEIGHT)
         stage.scene = scene
+        stage.setOnCloseRequest {
+            arena.stop()
+        }
         stage.show()
     }
 }
-

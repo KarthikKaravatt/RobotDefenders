@@ -14,12 +14,18 @@ repositories {
 
 dependencies {
     testImplementation(kotlin("test"))
+    detektPlugins("io.gitlab.arturbosch.detekt:detekt-formatting:1.23.1")
 }
 
 tasks.test {
     useJUnitPlatform()
 }
 
+detekt {
+    toolVersion = "1.23.1"
+    config.setFrom(file("default-detekt-config.yml"))
+    buildUponDefaultConfig = true
+}
 kotlin {
     jvmToolchain(20)
 }

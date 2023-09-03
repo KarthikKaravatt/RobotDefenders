@@ -1,6 +1,7 @@
 import javafx.geometry.VPos
 import javafx.scene.canvas.Canvas
 import javafx.scene.canvas.GraphicsContext
+import javafx.scene.control.TextArea
 import javafx.scene.image.Image
 import javafx.scene.layout.Pane
 import javafx.scene.paint.Color
@@ -28,7 +29,7 @@ const val CENTER_Y: Double = 4.0
 const val MOVEMENT_ANIMATION_DELAY: Int = 400
 const val MOVEMENT_ANIMATION_INTERVALS: Long = 10
 
-class JFXArena : Pane() {
+class JFXArena(logger: TextArea, statusInfo: TextArea) : Pane() {
     private val gridWidth: Int = GRID_WIDTH
     private val gridHeight: Int = GRID_HEIGHT
 
@@ -36,8 +37,7 @@ class JFXArena : Pane() {
     private var canvas: Canvas = Canvas()
     private var listeners: MutableList<ArenaListener>? = null
 
-    private val game = Game(this)
-
+    private val game = Game(this, logger, statusInfo)
 
     init {
 
@@ -51,6 +51,7 @@ class JFXArena : Pane() {
         return javaClass.classLoader.getResourceAsStream(file)
             ?: throw AssertionError("Cannot find image file $file")
     }
+
     /**
      *
      */
@@ -147,31 +148,7 @@ class JFXArena : Pane() {
         gfx.strokeText(label, (gridX + CENTER_OFFSET) * gridSquareSize, (gridY + LABEL_OFFSET) * gridSquareSize)
     }
 
-    fun setGameOver() {
-        game.setGameOver()
+    fun stop() {
+        game.endGame()
     }
-
-    //private fun drawLine(
-    //    gfx: GraphicsContext,
-    //    gridX1: Double,
-    //    gridY1: Double,
-    //    gridX2: Double,
-    //    gridY2: Double
-    //) {
-    //    gfx.stroke = Color.RED
-
-    //    val radius = LINE_RADIUS
-    //    val angle = atan2(gridY2 - gridY1, gridX2 - gridX1)
-    //    val clippedGridX1 = gridX1 + cos(angle) * radius
-    //    val clippedGridY1 = gridY1 + sin(angle) * radius
-
-    //    gfx.strokeLine(
-    //        (clippedGridX1 + CENTER_OFFSET) * gridSquareSize,
-    //        (clippedGridY1 + CENTER_OFFSET) * gridSquareSize,
-    //        (gridX2 + CENTER_OFFSET) * gridSquareSize,
-    //        (gridY2 + CENTER_OFFSET) * gridSquareSize
-    //    )
-    //}
-
-
 }

@@ -1,6 +1,5 @@
 import javafx.scene.image.Image
 
-
 class Robot(
     val robotID: Int,
     @Volatile var pos: Point,
@@ -18,17 +17,17 @@ class Robot(
         require(pos.y >= 0) { "Robot y position must be non-negative" }
     }
 
-    // TODO: Maybe get rid of the locks?
     fun updatePos(newPos: Point) {
+        // position can be changed by JFX thread or robot thread
         synchronized(this) {
             pos = newPos
         }
     }
 
     fun updateFuturePos(newFuturePos: Point) {
+        // position can be changed by JFX thread or robot thread
         synchronized(this) {
             futurePos = newFuturePos
         }
     }
-
 }

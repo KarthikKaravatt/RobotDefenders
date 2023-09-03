@@ -1,4 +1,7 @@
 import javafx.application.Platform
+import javafx.beans.binding.Bindings
+import javafx.beans.property.SimpleStringProperty
+import javafx.scene.control.TextArea
 import javafx.scene.image.Image
 import java.io.InputStream
 import java.util.*
@@ -11,8 +14,14 @@ import kotlin.random.Random
 
 const val WALL_PLACE_DELAY: Long = 2000
 const val WALL_MAX_CAPACITY: Int = 10
+const val SCORE_PER_SECOND: Int = 10
+const val SECOND_MILI: Long = 1000
+const val SCORE_ROBOT_DESTROYED: Int = 100
 
-class Game(private val arena: JFXArena) {
+// sorry, but the game class will be a bit long because it has to handle a lot of things
+// Could split it up into different classes, but I think it would be more confusing
+@Suppress("TooManyFunctions")
+class Game(private val arena: JFXArena, private val logger: TextArea, statusInfo: TextArea) {
     var walls: MutableMap<Point, Wall> = Collections.synchronizedMap(mutableMapOf<Point, Wall>())
         private set
     var robotMap: MutableMap<Int, Robot> = Collections.synchronizedMap(mutableMapOf<Int, Robot>())
@@ -21,7 +30,22 @@ class Game(private val arena: JFXArena) {
     private var gameOver: AtomicBoolean = AtomicBoolean(false)
     private val executionService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors())
     private val wallPlaceLock = ReentrantLock()
+    private var score: Int = 0
+    private var wallAmount: Int = 0
 
+    // number of queued-up walls
+    private val wallAmountProperty = SimpleStringProperty("Walls: $wallAmount/$WALL_MAX_CAPACITY\n")
+    private val scoreProperty = SimpleStringProperty("Score: ${score}\n")
+    private val statusTextBinding = Bindings.concat(wallAmountProperty, scoreProperty)
+    private val scoreLock = ReentrantLock()
+    private val wallStatusLock = ReentrantLock()
+    private lateinit var spawnRobotThread: Thread
+    private lateinit var wallThread: Thread
+    private lateinit var scoreThread: Thread
+
+    init {
+        statusInfo.textProperty().bind(statusTextBinding)
+    }
 
     private fun addRobot(id: Int, x: Double, y: Double, delay: Int) {
         val ioStream: InputStream = javaClass.classLoader.getResourceAsStream(ROBOT_IMAGE_FILE)
@@ -35,11 +59,12 @@ class Game(private val arena: JFXArena) {
 
     private fun isRobotAtPosition(x: Int, y: Int): Boolean {
         return robotMap.values.any {
-            it.pos.x == x.toDouble() && it.pos.y == y.toDouble() ||
-                    it.futurePos.x == x.toDouble() && it.futurePos.y == y.toDouble()
+            it.pos.x == x.toDouble() &&
+                    it.pos.y == y.toDouble() ||
+                    it.futurePos.x == x.toDouble() &&
+                    it.futurePos.y == y.toDouble()
         }
     }
-
 
     private fun spawnRobot() {
         // Generate a unique id for the robot
@@ -59,72 +84,42 @@ class Game(private val arena: JFXArena) {
         // Create a robot with a random delay
         val delay: Int = Random.nextInt(MIN_DELAY, MAX_DELAY)
         addRobot(id, x.toDouble(), y.toDouble(), delay)
+        logger.appendText("Robot $id spawned\n")
+        Platform.runLater { arena.requestLayout() }
         // Start the robot AI thread if the game is not over
         if (!gameOver.get()) {
             robotMap[id]?.let { createRobotAiThread(it) }
-            println("robot $id spawned")
         }
     }
-    fun startGame() {
-        val listener = object : ArenaListener {
-            override fun squareClicked(x: Int, y: Int) {
-                val clickedPoint = Point(x.toDouble(), y.toDouble())
-                // Cannot place wall on spawn points or center point
-                val illegalPoints = setOf(
-                    Point(CENTER_X, CENTER_Y),
-                    Point(GRID_WIDTH.toDouble() - 1, GRID_HEIGHT.toDouble() - 1),
-                    Point(0.0, 0.0),
-                    Point(GRID_WIDTH.toDouble() - 1, 0.0),
-                    Point(0.0, GRID_HEIGHT.toDouble() - 1)
-                )
-                if (clickedPoint !in illegalPoints) {
-                    wallPlaceLock.lock()
-                    try {
-                        if (walls.size < WALL_MAX_CAPACITY) {
-                            // pass the clicked point to the wall thread
-                            wallQueue.put(clickedPoint)
-                        }
-                    } finally {
-                        wallPlaceLock.unlock()
-                    }
-                }
-            }
+
+    private fun incrementWallAmount() {
+        wallStatusLock.lock()
+        try {
+            wallAmount += 1
+            wallAmountProperty.set("Walls: $wallAmount/$WALL_MAX_CAPACITY\n")
+        } finally {
+            wallStatusLock.unlock()
         }
-        arena.addListener(listener)
-        // spawn the robots
-        val spawnRobotThread = Thread {
-            while (!gameOver.get()) {
-                Thread.sleep(ROBOT_SPAWN_RATE)
-                spawnRobot()
-            }
+    }
+
+    private fun decrementWallAmount() {
+        wallStatusLock.lock()
+        try {
+            wallAmount -= 1
+            wallAmountProperty.set("Walls: $wallAmount/$WALL_MAX_CAPACITY\n")
+        } finally {
+            wallStatusLock.unlock()
         }
-        // Stops thread when the main thread is stopped
-        spawnRobotThread.isDaemon = true
-        spawnRobotThread.start()
-        val wallThread = Thread {
-            var addDelay: Boolean
-            while (!gameOver.get()) {
-                val ioStream: InputStream = javaClass.classLoader.getResourceAsStream(WALL_IMAGE_FILE)
-                    ?: throw AssertionError("Cannot find image file $WALL_IMAGE_FILE")
-                // take the clicked point from the javaFX thread
-                val wallPos = wallQueue.take()
-                val wall = Wall(wallPos, Image(ioStream))
-                if (walls.containsKey(wallPos) || isRobotAtPosition(wallPos.x.toInt(), wallPos.y.toInt())) {
-                    addDelay = false
-                } else {
-                    walls[wallPos] = wall
-                    Platform.runLater {
-                        arena.requestLayout()
-                    }
-                    addDelay = true
-                }
-                if (addDelay) {
-                    Thread.sleep(WALL_PLACE_DELAY)
-                }
-            }
+    }
+
+    private fun addScore(score: Int) {
+        scoreLock.lock()
+        try {
+            this.score += score
+            scoreProperty.set("Score: ${this.score}\n")
+        } finally {
+            scoreLock.unlock()
         }
-        wallThread.isDaemon = true
-        wallThread.start()
     }
 
     private fun isRobotAboutToWin(
@@ -133,17 +128,17 @@ class Game(private val arena: JFXArena) {
         robot: Robot
     ): Boolean {
         val centerPoint = Point(CENTER_X, CENTER_Y)
-        val isMovingToCenter = endX == centerPoint.x && endY == centerPoint.y
         val isMovingHorizontallyThroughCenter = endX == centerPoint.x && robot.pos.y == centerPoint.y
         val isMovingVerticallyThroughCenter = endY == centerPoint.y && robot.pos.x == centerPoint.x
-        if (isMovingToCenter || isMovingHorizontallyThroughCenter || isMovingVerticallyThroughCenter) {
+        if (isMovingHorizontallyThroughCenter || isMovingVerticallyThroughCenter) {
+            moveRobotPosition(CENTER_X, CENTER_Y, robot)
             robotMap.remove(robot.robotID)
-            arena.setGameOver()
+            Platform.runLater { arena.requestLayout() }
+            setGameOver()
             return false
         }
         return true
     }
-
 
     private fun moveRobotPosition(x: Double, y: Double, robot: Robot) {
         // Does not allow the robot to move outside the grid
@@ -158,13 +153,14 @@ class Game(private val arena: JFXArena) {
             val currentX = robot.pos.x + (xPos - robot.pos.x) * progress
             val currentY = robot.pos.y + (yPos - robot.pos.y) * progress
             robot.updatePos(Point(currentX, currentY))
-            //makes the animation smoother
+            // makes the animation smoother
             Thread.sleep(MOVEMENT_ANIMATION_INTERVALS)
             Platform.runLater {
                 arena.requestLayout()
             }
         }
         robot.updatePos(Point(xPos, yPos))
+        Platform.runLater { arena.requestLayout() }
     }
 
     private fun handleWallCollision(x: Double, y: Double, robot: Robot) {
@@ -172,10 +168,15 @@ class Game(private val arena: JFXArena) {
             walls[Point(x, y)]?.let { wall ->
                 if (wall.getDamaged()) {
                     walls.remove(Point(x, y))
+                    decrementWallAmount()
+                    logger.appendText("Wall at ${x.toInt()}, ${y.toInt()} destroyed\n")
                 } else {
                     wall.setDamaged()
+                    logger.appendText("Wall at ${x.toInt()}, ${y.toInt()} damaged\n")
                 }
+                moveRobotPosition(x, y, robot)
                 robotMap.remove(robot.robotID)
+                addScore(SCORE_ROBOT_DESTROYED)
                 Platform.runLater { arena.requestLayout() }
             }
         } else {
@@ -211,23 +212,140 @@ class Game(private val arena: JFXArena) {
     private fun createRobotAiThread(robot: Robot) {
         val robotAiTask = Runnable {
             val centerPoint = Point(CENTER_X, CENTER_Y)
-            while (robot.pos != centerPoint && !gameOver.get()) {
+            // thread will stop if the robot is removed
+            while (robot.pos != centerPoint && !gameOver.get() && robotMap.containsKey(robot.robotID)) {
                 Thread.sleep(robot.delay.toLong())
-                if (robotMap.containsKey(robot.robotID)) {
-                    moveRobot(robot)
-                } else {
-                    Platform.runLater { arena.requestLayout() }
-                    break
-                }
+                moveRobot(robot)
             }
+            Platform.runLater { arena.requestLayout() }
         }
         executionService.execute(robotAiTask)
-
     }
 
-    fun setGameOver() {
+    private fun setGameOver() {
         gameOver.set(true)
+        logger.appendText("Game Over\n")
+        Platform.runLater { arena.requestLayout() }
         executionService.shutdown()
     }
 
+    private fun startRobotSpawnThread() {
+        // spawn the robots
+        spawnRobotThread = Thread {
+            while (!gameOver.get()) {
+                try {
+                    Thread.sleep(ROBOT_SPAWN_RATE)
+                } catch (e: InterruptedException) {
+                    println("Spawn robot thread interrupted")
+                }
+                spawnRobot()
+            }
+        }
+        // Stops thread when the main thread is stopped
+        spawnRobotThread.isDaemon = true
+        spawnRobotThread.start()
+    }
+
+    private fun startWallThread() {
+        wallThread = Thread {
+            var addDelay: Boolean
+            while (!gameOver.get()) {
+                val ioStream: InputStream = javaClass.classLoader.getResourceAsStream(WALL_IMAGE_FILE)
+                    ?: throw AssertionError("Cannot find image file $WALL_IMAGE_FILE")
+                // take the clicked point from the javaFX thread
+                val wallPos = wallQueue.take()
+                val wall = Wall(wallPos, Image(ioStream))
+                if (walls.containsKey(wallPos) || isRobotAtPosition(wallPos.x.toInt(), wallPos.y.toInt())) {
+                    decrementWallAmount()
+                    addDelay = false
+                } else {
+                    walls[wallPos] = wall
+                    logger.appendText("Wall placed at ${wallPos.x.toInt()}, ${wallPos.y.toInt()}\n")
+                    Platform.runLater { arena.requestLayout() }
+                    addDelay = true
+                }
+                if (addDelay) {
+                    try {
+                        Thread.sleep(WALL_PLACE_DELAY)
+                    } catch (e: InterruptedException) {
+                        println("Wall thread interrupted")
+                    }
+                }
+            }
+        }
+        wallThread.isDaemon = true
+        wallThread.start()
+    }
+
+    private fun startScoreThread() {
+        scoreThread = Thread {
+            while (!gameOver.get()) {
+                // Increment the score by 10 points every second
+                // and update the scoreProperty to be atomic
+                addScore(SCORE_PER_SECOND)
+                try {
+                    Thread.sleep(SECOND_MILI)
+                } catch (e: InterruptedException) {
+                    println("Score thread interrupted")
+                }
+            }
+        }
+        scoreThread.isDaemon = true
+        scoreThread.start()
+    }
+
+    private fun addClickListener() {
+        val listener = object : ArenaListener {
+            override fun squareClicked(x: Int, y: Int) {
+                wallPlaceLock.lock()
+                try {
+                    if (wallAmount >= WALL_MAX_CAPACITY) {
+                        return
+                    }
+                } finally {
+                    wallPlaceLock.unlock()
+                }
+                val clickedPoint = Point(x.toDouble(), y.toDouble())
+                // Cannot place wall on spawn points or center point
+                val illegalPoints = setOf(
+                    Point(CENTER_X, CENTER_Y),
+                    Point(GRID_WIDTH.toDouble() - 1, GRID_HEIGHT.toDouble() - 1),
+                    Point(0.0, 0.0),
+                    Point(GRID_WIDTH.toDouble() - 1, 0.0),
+                    Point(0.0, GRID_HEIGHT.toDouble() - 1)
+                )
+                if (clickedPoint !in illegalPoints) {
+                    if (walls.size < WALL_MAX_CAPACITY) {
+                        // pass the clicked point to the wall thread
+                        wallQueue.put(clickedPoint)
+                        incrementWallAmount()
+                    }
+                }
+            }
+        }
+        arena.addListener(listener)
+    }
+
+    fun startGame() {
+        addClickListener()
+        startRobotSpawnThread()
+        startWallThread()
+        startScoreThread()
+    }
+
+    fun endGame() {
+        gameOver.set(true)
+        if (spawnRobotThread.isAlive) {
+            spawnRobotThread.interrupt()
+        }
+        if (wallThread.isAlive) {
+            wallThread.interrupt()
+        }
+        if (scoreThread.isAlive) {
+            scoreThread.interrupt()
+        }
+        if (!executionService.isShutdown) {
+            executionService.shutdown()
+        }
+    }
 }
