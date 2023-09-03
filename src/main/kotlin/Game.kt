@@ -40,9 +40,6 @@ class Game(private val arena: JFXArena) {
         }
     }
 
-    private fun isWallAtPosition(x: Int, y: Int): Boolean {
-        return walls.containsKey(Point(x.toDouble(), y.toDouble()))
-    }
 
     private fun spawnRobot() {
         // Generate a unique id for the robot
@@ -58,13 +55,14 @@ class Game(private val arena: JFXArena) {
         do {
             x = xPositions.random()
             y = yPositions.random()
-        } while (isRobotAtPosition(x, y) || isWallAtPosition(x, y))
+        } while (isRobotAtPosition(x, y) || walls.containsKey(Point(x.toDouble(), y.toDouble())))
         // Create a robot with a random delay
         val delay: Int = Random.nextInt(MIN_DELAY, MAX_DELAY)
         addRobot(id, x.toDouble(), y.toDouble(), delay)
         // Start the robot AI thread if the game is not over
         if (!gameOver.get()) {
             robotMap[id]?.let { createRobotAiThread(it) }
+            println("robot $id spawned")
         }
     }
     fun startGame() {
@@ -104,7 +102,7 @@ class Game(private val arena: JFXArena) {
         spawnRobotThread.isDaemon = true
         spawnRobotThread.start()
         val wallThread = Thread {
-            var addDelay = true
+            var addDelay: Boolean
             while (!gameOver.get()) {
                 val ioStream: InputStream = javaClass.classLoader.getResourceAsStream(WALL_IMAGE_FILE)
                     ?: throw AssertionError("Cannot find image file $WALL_IMAGE_FILE")
@@ -170,7 +168,7 @@ class Game(private val arena: JFXArena) {
     }
 
     private fun handleWallCollision(x: Double, y: Double, robot: Robot) {
-        if (isWallAtPosition(x.toInt(), y.toInt())) {
+        if (walls.containsKey(Point(x, y))) {
             walls[Point(x, y)]?.let { wall ->
                 if (wall.getDamaged()) {
                     walls.remove(Point(x, y))
@@ -219,9 +217,9 @@ class Game(private val arena: JFXArena) {
                     moveRobot(robot)
                 } else {
                     Platform.runLater { arena.requestLayout() }
+                    break
                 }
             }
-            executionService.shutdown()
         }
         executionService.execute(robotAiTask)
 
@@ -229,6 +227,7 @@ class Game(private val arena: JFXArena) {
 
     fun setGameOver() {
         gameOver.set(true)
+        executionService.shutdown()
     }
 
 }
