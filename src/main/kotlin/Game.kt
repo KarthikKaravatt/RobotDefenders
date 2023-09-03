@@ -2,17 +2,25 @@ import javafx.application.Platform
 import javafx.scene.image.Image
 import java.io.InputStream
 import java.util.*
+import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.BlockingQueue
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.locks.ReentrantLock
 import kotlin.random.Random
+
+const val WALL_PLACE_DELAY: Long = 2000
+const val WALL_MAX_CAPACITY: Int = 10
 
 class Game(private val arena: JFXArena) {
     var walls: MutableMap<Point, Wall> = Collections.synchronizedMap(mutableMapOf<Point, Wall>())
         private set
     var robotMap: MutableMap<Int, Robot> = Collections.synchronizedMap(mutableMapOf<Int, Robot>())
         private set
+    private var wallQueue: BlockingQueue<Point> = ArrayBlockingQueue(WALL_MAX_CAPACITY)
     private var gameOver: AtomicBoolean = AtomicBoolean(false)
     private val executionService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors())
+    private val wallPlaceLock = ReentrantLock()
 
 
     private fun addRobot(id: Int, x: Double, y: Double, delay: Int) {
@@ -59,7 +67,6 @@ class Game(private val arena: JFXArena) {
             robotMap[id]?.let { createRobotAiThread(it) }
         }
     }
-
     fun startGame() {
         val listener = object : ArenaListener {
             override fun squareClicked(x: Int, y: Int) {
@@ -72,20 +79,20 @@ class Game(private val arena: JFXArena) {
                     Point(GRID_WIDTH.toDouble() - 1, 0.0),
                     Point(0.0, GRID_HEIGHT.toDouble() - 1)
                 )
-                // Cannot place a wall on top of another wall or robot
-                if (!walls.containsKey(clickedPoint) &&
-                    !isRobotAtPosition(clickedPoint.x.toInt(), clickedPoint.y.toInt()) &&
-                    clickedPoint !in illegalPoints
-                ) {
-                    val ioStream: InputStream = javaClass.classLoader.getResourceAsStream(WALL_IMAGE_FILE)
-                        ?: throw AssertionError("Cannot find image file $WALL_IMAGE_FILE")
-                    walls[clickedPoint] = Wall(clickedPoint, Image(ioStream))
-                    Platform.runLater { arena.requestLayout() }
+                if (clickedPoint !in illegalPoints) {
+                    wallPlaceLock.lock()
+                    try {
+                        if (walls.size < WALL_MAX_CAPACITY) {
+                            // pass the clicked point to the wall thread
+                            wallQueue.put(clickedPoint)
+                        }
+                    } finally {
+                        wallPlaceLock.unlock()
+                    }
                 }
             }
         }
         arena.addListener(listener)
-
         // spawn the robots
         val spawnRobotThread = Thread {
             while (!gameOver.get()) {
@@ -96,6 +103,30 @@ class Game(private val arena: JFXArena) {
         // Stops thread when the main thread is stopped
         spawnRobotThread.isDaemon = true
         spawnRobotThread.start()
+        val wallThread = Thread {
+            var addDelay = true
+            while (!gameOver.get()) {
+                val ioStream: InputStream = javaClass.classLoader.getResourceAsStream(WALL_IMAGE_FILE)
+                    ?: throw AssertionError("Cannot find image file $WALL_IMAGE_FILE")
+                // take the clicked point from the javaFX thread
+                val wallPos = wallQueue.take()
+                val wall = Wall(wallPos, Image(ioStream))
+                if (walls.containsKey(wallPos) || isRobotAtPosition(wallPos.x.toInt(), wallPos.y.toInt())) {
+                    addDelay = false
+                } else {
+                    walls[wallPos] = wall
+                    Platform.runLater {
+                        arena.requestLayout()
+                    }
+                    addDelay = true
+                }
+                if (addDelay) {
+                    Thread.sleep(WALL_PLACE_DELAY)
+                }
+            }
+        }
+        wallThread.isDaemon = true
+        wallThread.start()
     }
 
     private fun isRobotAboutToWin(
