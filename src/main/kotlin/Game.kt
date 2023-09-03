@@ -60,9 +60,9 @@ class Game(private val arena: JFXArena, private val logger: TextArea, statusInfo
     private fun isRobotAtPosition(x: Int, y: Int): Boolean {
         return robotMap.values.any {
             it.pos.x == x.toDouble() &&
-                    it.pos.y == y.toDouble() ||
-                    it.futurePos.x == x.toDouble() &&
-                    it.futurePos.y == y.toDouble()
+                it.pos.y == y.toDouble() ||
+                it.futurePos.x == x.toDouble() &&
+                it.futurePos.y == y.toDouble()
         }
     }
 
