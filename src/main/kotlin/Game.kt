@@ -250,26 +250,30 @@ class Game(private val arena: JFXArena, private val logger: TextArea, statusInfo
         wallThread = Thread {
             var addDelay: Boolean
             while (!gameOver.get()) {
-                val ioStream: InputStream = javaClass.classLoader.getResourceAsStream(WALL_IMAGE_FILE)
-                    ?: throw AssertionError("Cannot find image file $WALL_IMAGE_FILE")
-                // take the clicked point from the javaFX thread
-                val wallPos = wallQueue.take()
-                val wall = Wall(wallPos, Image(ioStream))
-                if (walls.containsKey(wallPos) || isRobotAtPosition(wallPos.x.toInt(), wallPos.y.toInt())) {
-                    decrementWallAmount()
-                    addDelay = false
-                } else {
-                    walls[wallPos] = wall
-                    logger.appendText("Wall placed at ${wallPos.x.toInt()}, ${wallPos.y.toInt()}\n")
-                    Platform.runLater { arena.requestLayout() }
-                    addDelay = true
-                }
-                if (addDelay) {
-                    try {
-                        Thread.sleep(WALL_PLACE_DELAY)
-                    } catch (e: InterruptedException) {
-                        println("Wall thread interrupted")
+                try {
+                    val ioStream: InputStream = javaClass.classLoader.getResourceAsStream(WALL_IMAGE_FILE)
+                        ?: throw AssertionError("Cannot find image file $WALL_IMAGE_FILE")
+                    // take the clicked point from the javaFX thread
+                    val wallPos = wallQueue.take()
+                    val wall = Wall(wallPos, Image(ioStream))
+                    if (walls.containsKey(wallPos) || isRobotAtPosition(wallPos.x.toInt(), wallPos.y.toInt())) {
+                        decrementWallAmount()
+                        addDelay = false
+                    } else {
+                        walls[wallPos] = wall
+                        logger.appendText("Wall placed at ${wallPos.x.toInt()}, ${wallPos.y.toInt()}\n")
+                        Platform.runLater { arena.requestLayout() }
+                        addDelay = true
                     }
+                    if (addDelay) {
+                        try {
+                            Thread.sleep(WALL_PLACE_DELAY)
+                        } catch (e: InterruptedException) {
+                            println("Wall thread interrupted")
+                        }
+                    }
+                } catch (e: InterruptedException) {
+                    println("Wall thread interrupted")
                 }
             }
         }
